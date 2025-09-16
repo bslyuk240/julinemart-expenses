@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JulineMart Expense Tracker</title>
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="description" content="Simple static expense tracker for JulineMart with multi-currency input (£, $, ₦) and Naira conversion." />
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="max-w-6xl mx-auto p-4 sm:p-6">
+    <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+      <h1 class="text-2xl sm:text-3xl font-bold">JulineMart Expense Tracker</h1>
+      <div class="flex items-center gap-2">
+        <button id="openSettings" class="px-3 py-2 rounded-xl bg-white shadow border hover:bg-slate-50">Settings</button>
+        <button id="backupBtn" class="px-3 py-2 rounded-xl bg-white shadow border hover:bg-slate-50">Backup JSON</button>
+        <label class="px-3 py-2 rounded-xl bg-white shadow border hover:bg-slate-50 cursor-pointer">
+          Restore JSON
+          <input id="restoreInput" type="file" accept="application/json" class="hidden" />
+        </label>
+        <button id="exportCSV" class="px-3 py-2 rounded-xl bg-white shadow border hover:bg-slate-50">Export CSV</button>
+        <button id="clearAll" class="px-3 py-2 rounded-xl bg-rose-100 text-rose-700 border border-rose-200 rounded-xl hover:bg-rose-200">Clear All</button>
+      </div>
+    </header>
+
+    <!-- Cards Row: Quick Totals -->
+    <section class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="p-4 bg-white rounded-2xl shadow border">
+        <h3 class="text-sm text-slate-500">Total ₦ (converted)</h3>
+        <p id="totalNGNConverted" class="text-2xl font-semibold mt-1">₦0</p>
+        <p class="text-xs text-slate-500 mt-2">All entries converted with fixed rates below.</p>
+      </div>
+      <div class="p-4 bg-white rounded-2xl shadow border">
+        <h3 class="text-sm text-slate-500">Sum by ₦</h3>
+        <p id="sumNGN" class="text-xl font-semibold mt-1">₦0</p>
+      </div>
+      <div class="p-4 bg-white rounded-2xl shadow border">
+        <h3 class="text-sm text-slate-500">Sum by £</h3>
+        <p id="sumGBP" class="text-xl font-semibold mt-1">£0</p>
+      </div>
+      <div class="p-4 bg-white rounded-2xl shadow border">
+        <h3 class="text-sm text-slate-500">Sum by $</h3>
+        <p id="sumUSD" class="text-xl font-semibold mt-1">$0</p>
+      </div>
+    </section>
+
+    <!-- Add Expense Form -->
+    <section class="bg-white rounded-2xl shadow border p-4 sm:p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-3">Add Expense</h2>
+      <form id="expenseForm" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <div class="md:col-span-1">
+          <label class="block text-sm mb-1" for="date">Date</label>
+          <input id="date" type="date" class="w-full rounded-xl border p-2" required />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm mb-1" for="desc">Description</label>
+          <input id="desc" type="text" placeholder="e.g., Facebook ads, delivery, salary" class="w-full rounded-xl border p-2" required />
+        </div>
+        <div class="md:col-span-1">
+          <label class="block text-sm mb-1" for="amount">Amount</label>
+          <input id="amount" type="number" step="0.01" min="0" class="w-full rounded-xl border p-2" required />
+        </div>
+        <div class="md:col-span-1">
+          <label class="block text-sm mb-1" for="currency">Currency</label>
+          <select id="currency" class="w-full rounded-xl border p-2" required>
+            <option value="NGN">₦ NGN</option>
+            <option value="GBP">£ GBP</option>
+            <option value="USD">$ USD</option>
+          </select>
+        </div>
+        <div class="md:col-span-5 flex items-center gap-2">
+          <button type="submit" class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800">Add</button>
+          <button id="resetForm" type="button" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 border hover:bg-slate-200">Reset</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Expenses Table -->
+    <section class="bg-white rounded-2xl shadow border overflow-hidden">
+      <div class="p-4 sm:p-6 flex items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold">Expenses</h2>
+        <input id="search" type="text" placeholder="Search description..." class="rounded-xl border p-2 w-64" />
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-100 text-slate-700">
+            <tr>
+              <th class="text-left px-4 py-2">Date</th>
+              <th class="text-left px-4 py-2">Description</th>
+              <th class="text-left px-4 py-2">Amount</th>
+              <th class="text-left px-4 py-2">Currency</th>
+              <th class="text-right px-4 py-2">₦ (converted)</th>
+              <th class="text-right px-4 py-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="p-4 sm:p-6 text-xs text-slate-500">Tip: Click an item to edit. Delete with the trash icon.</div>
+    </section>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow border p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold">Settings – Fixed Rates</h3>
+        <button id="closeSettings" class="text-slate-500 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Set your preferred fixed conversion rates to Naira (₦). These are stored locally on your device.</p>
+      <form id="settingsForm" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm mb-1" for="rateGBP">₦ per £1</label>
+          <input id="rateGBP" type="number" step="0.01" min="0" class="w-full rounded-xl border p-2" required />
+        </div>
+        <div>
+          <label class="block text-sm mb-1" for="rateUSD">₦ per $1</label>
+          <input id="rateUSD" type="number" step="0.01" min="0" class="w-full rounded-xl border p-2" required />
+        </div>
+        <div>
+          <label class="block text-sm mb-1" for="rateNGN">₦ per ₦1</label>
+          <input id="rateNGN" type="number" step="0.01" min="0" class="w-full rounded-xl border p-2" value="1" disabled />
+          <p class="text-xs text-slate-500 mt-1">Always 1</p>
+        </div>
+        <div class="sm:col-span-2 flex items-center gap-2">
+          <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800" type="submit">Save</button>
+          <button id="resetRates" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 border hover:bg-slate-200" type="button">Reset Defaults</button>
+        </div>
+      </form>
+      <div class="mt-6 border-t pt-4">
+        <h4 class="font-semibold mb-2">Migration Safety</h4>
+        <p class="text-sm text-slate-600">When you later move to a dynamic app, use <b>Backup JSON</b> to export your data and import it into the new system. Your data here lives in your browser's storage.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Storage Keys =====
+    const EXPENSES_KEY = 'julinemart-expenses-v1';
+    const RATES_KEY = 'julinemart-rates-v1';
+
+    // ===== State =====
+    let expenses = loadExpenses();
+    let rates = loadRates();
+    const currencySymbols = { NGN: '₦', GBP: '£', USD: '$' };
+
+    // ===== Utils =====
+    function loadExpenses() {
+      try { return JSON.parse(localStorage.getItem(EXPENSES_KEY)) || []; } catch { return []; }
+    }
+    function saveExpenses() { localStorage.setItem(EXPENSES_KEY, JSON.stringify(expenses)); }
+
+    function loadRates() {
+      const defaults = { GBP: 2000, USD: 1600, NGN: 1 }; // <-- sensible placeholders; edit in Settings
+      try {
+        return { ...defaults, ...(JSON.parse(localStorage.getItem(RATES_KEY)) || {}) };
+      } catch {
+        return defaults;
+      }
+    }
+    function saveRates() { localStorage.setItem(RATES_KEY, JSON.stringify(rates)); }
+
+    function formatMoney(value, currency) {
+      const locale = 'en-NG';
+      const map = { NGN: 'NGN', GBP: 'GBP', USD: 'USD' };
+      try {
+        return new Intl.NumberFormat(locale, { style: 'currency', currency: map[currency] || 'NGN', maximumFractionDigits: 2 }).format(Number(value) || 0);
+      } catch {
+        return (currencySymbols[currency] || '') + (Number(value) || 0).toFixed(2);
+      }
+    }
+
+    function toNaira(amount, currency) {
+      if (!amount) return 0;
+      const rate = rates[currency] || 1;
+      return Number(amount) * Number(rate);
+    }
+
+    function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+    // ===== DOM Refs =====
+    const tbody = document.getElementById('tbody');
+    const totalNGNConverted = document.getElementById('totalNGNConverted');
+    const sumNGN = document.getElementById('sumNGN');
+    const sumGBP = document.getElementById('sumGBP');
+    const sumUSD = document.getElementById('sumUSD');
+
+    const expenseForm = document.getElementById('expenseForm');
+    const dateEl = document.getElementById('date');
+    const descEl = document.getElementById('desc');
+    const amountEl = document.getElementById('amount');
+    const currencyEl = document.getElementById('currency');
+    const resetFormBtn = document.getElementById('resetForm');
+    const searchEl = document.getElementById('search');
+
+    const openSettings = document.getElementById('openSettings');
+    const closeSettings = document.getElementById('closeSettings');
+    const settingsModal = document.getElementById('settingsModal');
+    const settingsForm = document.getElementById('settingsForm');
+    const rateGBP = document.getElementById('rateGBP');
+    const rateUSD = document.getElementById('rateUSD');
+    const resetRates = document.getElementById('resetRates');
+
+    const backupBtn = document.getElementById('backupBtn');
+    const restoreInput = document.getElementById('restoreInput');
+    const exportCSV = document.getElementById('exportCSV');
+    const clearAll = document.getElementById('clearAll');
+
+    // Prefill today
+    dateEl.valueAsNumber = Date.now() - (new Date().getTimezoneOffset() * 60000);
+
+    // ===== Render =====
+    function render() {
+      const query = (searchEl.value || '').trim().toLowerCase();
+      const filtered = !query ? expenses : expenses.filter(e => (e.desc || '').toLowerCase().includes(query));
+
+      // Build rows
+      tbody.innerHTML = '';
+      filtered
+        .sort((a, b) => (a.date || '').localeCompare(b.date))
+        .forEach(item => {
+          const tr = document.createElement('tr');
+          tr.className = 'border-b hover:bg-slate-50';
+          tr.innerHTML = `
+            <td class="px-4 py-2 align-top">${item.date || ''}</td>
+            <td class="px-4 py-2 align-top cursor-pointer text-slate-800">${escapeHtml(item.desc || '')}</td>
+            <td class="px-4 py-2 align-top">${formatMoney(item.amount, item.currency)}</td>
+            <td class="px-4 py-2 align-top">${item.currency}</td>
+            <td class="px-4 py-2 align-top text-right">${formatMoney(toNaira(item.amount, item.currency), 'NGN')}</td>
+            <td class="px-4 py-2 align-top text-right">
+              <button data-id="${item.id}" class="editBtn text-slate-600 hover:text-slate-900 mr-2">✎</button>
+              <button data-id="${item.id}" class="delBtn text-rose-600 hover:text-rose-800">🗑</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+      // Totals (native sums)
+      const sums = { NGN: 0, GBP: 0, USD: 0 };
+      expenses.forEach(e => { sums[e.currency] += Number(e.amount) || 0; });
+      sumNGN.textContent = formatMoney(sums.NGN, 'NGN');
+      sumGBP.textContent = formatMoney(sums.GBP, 'GBP');
+      sumUSD.textContent = formatMoney(sums.USD, 'USD');
+
+      // Overall Naira converted
+      const totalNaira = expenses.reduce((acc, e) => acc + toNaira(e.amount, e.currency), 0);
+      totalNGNConverted.textContent = formatMoney(totalNaira, 'NGN');
+
+      attachRowHandlers();
+    }
+
+    function attachRowHandlers() {
+      document.querySelectorAll('.delBtn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          expenses = expenses.filter(e => e.id !== id);
+          saveExpenses();
+          render();
+        });
+      });
+      document.querySelectorAll('.editBtn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          const item = expenses.find(e => e.id === id);
+          if (!item) return;
+          // Load into form for quick edit
+          dateEl.value = item.date || '';
+          descEl.value = item.desc || '';
+          amountEl.value = item.amount || '';
+          currencyEl.value = item.currency || 'NGN';
+          // Replace entry on next submit
+          expenseForm.dataset.editingId = id;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      });
+    }
+
+    // ===== Event Handlers =====
+    expenseForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const payload = {
+        id: expenseForm.dataset.editingId || uid(),
+        date: dateEl.value,
+        desc: descEl.value.trim(),
+        amount: Number(amountEl.value),
+        currency: currencyEl.value,
+      };
+
+      if (!payload.desc || !payload.amount || !payload.date) return;
+
+      const existingIdx = expenses.findIndex(x => x.id === payload.id);
+      if (existingIdx >= 0) {
+        expenses[existingIdx] = payload; // edit
+        delete expenseForm.dataset.editingId;
+      } else {
+        expenses.push(payload); // add new
+      }
+
+      saveExpenses();
+      expenseForm.reset();
+      // keep currency selection for speed
+      currencyEl.value = payload.currency;
+      // keep today date for speed
+      dateEl.valueAsNumber = Date.now() - (new Date().getTimezoneOffset() * 60000);
+      render();
+    });
+
+    resetFormBtn.addEventListener('click', () => {
+      expenseForm.reset();
+      delete expenseForm.dataset.editingId;
+      currencyEl.value = 'NGN';
+      dateEl.valueAsNumber = Date.now() - (new Date().getTimezoneOffset() * 60000);
+    });
+
+    searchEl.addEventListener('input', render);
+
+    // Settings Modal
+    openSettings.addEventListener('click', () => {
+      rateGBP.value = rates.GBP;
+      rateUSD.value = rates.USD;
+      settingsModal.classList.remove('hidden');
+      settingsModal.classList.add('flex');
+    });
+    closeSettings.addEventListener('click', () => {
+      settingsModal.classList.add('hidden');
+      settingsModal.classList.remove('flex');
+    });
+
+    settingsForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const g = Number(rateGBP.value) || 0;
+      const u = Number(rateUSD.value) || 0;
+      if (g <= 0 || u <= 0) return alert('Rates must be positive numbers');
+      rates.GBP = g; rates.USD = u; rates.NGN = 1;
+      saveRates();
+      render();
+      settingsModal.classList.add('hidden');
+      settingsModal.classList.remove('flex');
+    });
+
+    resetRates.addEventListener('click', () => {
+      rates = { GBP: 2000, USD: 1600, NGN: 1 };
+      saveRates();
+      rateGBP.value = rates.GBP;
+      rateUSD.value = rates.USD;
+      render();
+    });
+
+    // Backup/Restore
+    backupBtn.addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify({ expenses, rates }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `julinemart-expenses-backup-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    restoreInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (Array.isArray(data.expenses)) expenses = data.expenses; else throw new Error('Invalid expenses');
+        if (data.rates && typeof data.rates === 'object') rates = { ...rates, ...data.rates };
+        saveExpenses(); saveRates(); render();
+        alert('Restore complete');
+      } catch (err) {
+        console.error(err); alert('Restore failed: invalid file');
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    // Export CSV
+    exportCSV.addEventListener('click', () => {
+      const rows = [['Date','Description','Amount','Currency','Converted_NGN']];
+      expenses.forEach(e => rows.push([e.date, e.desc.replaceAll('"','\''), String(e.amount), e.currency, String(toNaira(e.amount, e.currency))]));
+      const csv = rows.map(r => r.map(cell => (/,|\n|\"/.test(cell) ? '"'+cell.replaceAll('"','""')+'"' : cell)).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'julinemart-expenses.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // Clear All
+    clearAll.addEventListener('click', () => {
+      if (!confirm('This will delete ALL expenses stored on this device. Continue?')) return;
+      expenses = []; saveExpenses(); render();
+    });
+
+    // HTML escape
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
